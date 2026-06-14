@@ -12,6 +12,12 @@
         <a asp-action="Create" class="btn btn-primary shadow-sm">+ Add New Asset</a>
     </div>
 
+<style>
+    /* Custom details row show/hide to avoid Bootstrap auto-closing behavior */
+    tr.details-row { display: none; }
+    tr.details-row.show { display: table-row; }
+</style>
+
     <!-- Filters Section -->
     <div class="card shadow-sm mb-4">
         <div class="card-body">
@@ -21,10 +27,25 @@
                 </div>
                 <div class="col-md-3">
                     <select name="typeFilter" class="form-select">
-                        <option value="" @(currentFilter == null ? "selected" : "")>-- All Types --</option>
+                        @if (currentFilter == null)
+                        {
+                            <option value="" selected>-- All Types --</option>
+                        }
+                        else
+                        {
+                            <option value="">-- All Types --</option>
+                        }
+
                         @foreach (MediaTracker.Models.AssetType type in Enum.GetValues(typeof(MediaTracker.Models.AssetType)))
                         {
-                            <option value="@type" @(currentFilter == type ? "selected" : "")>@type</option>
+                            if (currentFilter == type)
+                            {
+                                <option value="@type" selected>@type</option>
+                            }
+                            else
+                            {
+                                <option value="@type">@type</option>
+                            }
                         }
                     </select>
                 </div>
@@ -48,20 +69,54 @@
                         <th>Type</th>
                         <th>SKU</th>
                         <th>Location</th>
-                        <th>Qty</th>
+                        <th>Available</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
+                    @{ 
+                        var labelGroups = ViewBag.LabelGroups as System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<MediaTracker.Models.Label>> ?? new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<MediaTracker.Models.Label>>();
+                        var approvedEmployees = ViewBag.ApprovedEmployees as System.Collections.Generic.List<MediaTracker.Models.Employee> ?? new System.Collections.Generic.List<MediaTracker.Models.Employee>();
+                    }
                     @foreach (var item in Model)
                     {
-                        <tr>
-                            <td class="fw-bold">@item.Name</td>
+                        var labelsFor = labelGroups.ContainsKey(item.Id) ? labelGroups[item.Id] : new System.Collections.Generic.List<MediaTracker.Models.Label>();
+                        var available = labelsFor.Count(l => !l.IsCheckedOut);
+                        var existingCount = labelsFor.Count;
+                        <tr data-available="@available">
+                            <td class="fw-bold">
+                                <button type="button" id="toggle-@item.Id" onclick="toggleDetails(@item.Id)" aria-expanded="false" aria-controls="details-@item.Id" class="btn btn-link p-0 text-decoration-none align-baseline">@item.Name</button>
+                                @if (labelGroups.ContainsKey(item.Id) && labelGroups[item.Id].Any())
+                                {
+                                    <span class="badge bg-secondary ms-2">Units @labelGroups[item.Id].Count</span>
+                                }
+                            </td>
                             <td><span class="badge bg-secondary">@item.Type</span></td>
-                            <td class="font-monospace">@item.SKU</td>
+                            <td class="font-monospace">
+                                <div>
+                                    @item.SKU
+                                    @if (!string.IsNullOrWhiteSpace(item.SerialNumber))
+                                    {
+                                        <small class="text-muted ms-2">SN: @item.SerialNumber</small>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(item.ProductKey))
+                                    {
+                                        <small class="text-muted ms-2">Key: @item.ProductKey</small>
+                                    }
+                                </div>
+                                @if (!labelGroups.ContainsKey(item.Id) || !labelGroups[item.Id].Any())
+                                {
+                                    <form asp-action="AssignLabel" method="post" class="d-inline ms-2">
+                                        <input type="hidden" name="assetId" value="@item.Id" />
+                                        <button class="btn btn-sm btn-outline-success">Assign Label</button>
+                                    </form>
+                                }
+                            </td>
                             <td>@item.Location</td>
-                            <td>@item.Quantity</td>
+                            <td>
+                                <span>@available / @item.Quantity</span>
+                            </td>
                             <td>
                                 <span class="badge @(item.Status == MediaTracker.Models.AssetStatus.Available ? "bg-success" : item.Status == MediaTracker.Models.AssetStatus.CheckedOut ? "bg-warning text-dark" : "bg-danger")">
                                     @item.Status
@@ -71,6 +126,75 @@
                                 <div class="btn-group btn-group-sm">
                                     <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-outline-primary">Edit</a>
                                     <button type="button" class="btn btn-outline-danger" data-id="@item.Id" data-name="@item.Name" onclick="confirmDelete(this)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr class="details-row" id="details-@item.Id">
+                            <td colspan="7">
+                                <div class="p-3 bg-light rounded">
+                                    @if (labelGroups.ContainsKey(item.Id) && labelGroups[item.Id].Any())
+                                    {
+                                        <div class="list-group">
+                                            @foreach (var l in labelGroups[item.Id])
+                                            {
+                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <strong>@l.InventoryNumber</strong>
+                                                        <div class="small text-muted">@((l.IsCheckedOut) ? $"Unavailable - checked out by {l.CheckedOutBy}" : "Available")</div>
+                                                    </div>
+                                                    <div>
+                                                        <a asp-action="UnitDetails" asp-route-labelId="@l.Id" class="btn btn-sm btn-link">Details</a>
+                                                        <form asp-action="ToggleCheckOut" method="post" class="d-inline">
+                                                            <input type="hidden" name="labelId" value="@l.Id" />
+                                                            <select name="user" class="form-select form-select-sm d-inline w-auto me-1">
+                                                                <option value="">Select Employee</option>
+                                                                @foreach (var emp in approvedEmployees)
+                                                                {
+                                                                    <option value="@emp.EmployeeId">@emp.Name (@emp.EmployeeId)</option>
+                                                                }
+                                                            </select>
+                                                            <button class="btn btn-sm btn-outline-primary">@((l.IsCheckedOut) ? "Check In" : "Check Out")</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <div class="mt-3 d-flex align-items-center">
+                                            <form asp-action="AssignLabelToUnit" method="post" class="d-flex me-2">
+                                                <input type="hidden" name="assetId" value="@item.Id" />
+                                                <input name="inventoryNumber" class="form-control form-control-sm me-1" placeholder="Enter new inventory #" />
+                                                <button class="btn btn-sm btn-success">Assign</button>
+                                            </form>
+                                            @if (existingCount < item.Quantity)
+                                            {
+                                                <form asp-action="GenerateLabelsForAsset" method="post" class="d-inline">
+                                                    <input type="hidden" name="assetId" value="@item.Id" />
+                                                    <button class="btn btn-sm btn-outline-primary">Generate Missing Labels</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div>No labeled units for this asset.</div>
+                                        <div>
+                                            <form asp-action="AssignLabel" method="post" class="d-inline me-2">
+                                                <input type="hidden" name="assetId" value="@item.Id" />
+                                                <button class="btn btn-sm btn-outline-success">Assign Label</button>
+                                            </form>
+                                            @if (existingCount < item.Quantity)
+                                            {
+                                                <form asp-action="GenerateLabelsForAsset" method="post" class="d-inline">
+                                                    <input type="hidden" name="assetId" value="@item.Id" />
+                                                    <button class="btn btn-sm btn-outline-primary">Generate Missing Labels</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    </div>
+                                    }
                                 </div>
                             </td>
                         </tr>
@@ -97,4 +221,83 @@
             document.getElementById('deleteForm').submit();
         }
     }
+</script>
+
+<script>
+    // restore persisted open rows
+    document.addEventListener('DOMContentLoaded', function(){
+        try{
+            document.querySelectorAll('tr[id^="details-"]').forEach(function(tr){
+                var id = tr.id.replace('details-','');
+                if(localStorage.getItem('asset-details-' + id)){
+                    tr.classList.add('show');
+                    var btn = document.getElementById('toggle-' + id);
+                    if(btn) btn.setAttribute('aria-expanded','true');
+                }
+            });
+        }catch(e){}
+    });
+</script>
+
+<script>
+    (function(){
+        var storageKey = 'assetDetailsOpen';
+        function getOpenSet(){
+            try {
+                var raw = localStorage.getItem(storageKey);
+                if(!raw) return new Set();
+                var arr = JSON.parse(raw);
+                return new Set(Array.isArray(arr) ? arr : []);
+            } catch(e) {
+                return new Set();
+            }
+        }
+        function saveOpenSet(set){
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(Array.from(set)));
+            } catch(e){}
+        }
+
+        // expose a global function used by the markup buttons
+        window.toggleDetails = function(id){
+            var tr = document.getElementById('details-' + id);
+            var btn = document.getElementById('toggle-' + id);
+            if(!tr) return;
+            var isShown = tr.classList.contains('show');
+            var openSet = getOpenSet();
+            if(isShown){
+                tr.classList.remove('show');
+                if(btn) btn.setAttribute('aria-expanded','false');
+                openSet.delete(String(id));
+            } else {
+                tr.classList.add('show');
+                if(btn) btn.setAttribute('aria-expanded','true');
+                openSet.add(String(id));
+            }
+            saveOpenSet(openSet);
+        };
+
+        // reopen any persisted rows on load
+        document.addEventListener('DOMContentLoaded', function(){
+            var openSet = getOpenSet();
+            openSet.forEach(function(id){
+                var tr = document.getElementById('details-' + id);
+                var btn = document.getElementById('toggle-' + id);
+                if(tr && !tr.classList.contains('show')) {
+                    tr.classList.add('show');
+                }
+                if(btn) btn.setAttribute('aria-expanded','true');
+            });
+        });
+
+        // prevent clicks inside the details area from toggling anything globally
+        document.addEventListener('click', function(e){
+            var el = e.target;
+            // if click inside a details-row, do nothing (keeps open)
+            while(el){
+                if(el.classList && el.classList.contains && el.classList.contains('details-row')) return;
+                el = el.parentNode;
+            }
+        }, true);
+    })();
 </script>

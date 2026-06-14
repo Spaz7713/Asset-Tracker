@@ -18,7 +18,7 @@ namespace MediaTracker.Models
         Depleted
     }
 
-    public class Asset
+    public class Asset : IValidatableObject
     {
         [Key]
         public int Id { get; set; }
@@ -34,6 +34,12 @@ namespace MediaTracker.Models
         public string SKU { get; set; } = string.Empty;
 
         [StringLength(100)]
+        public string? SerialNumber { get; set; }
+
+        [StringLength(200)]
+        public string? ProductKey { get; set; }
+
+        [StringLength(100)]
         public string Location { get; set; } = string.Empty;
 
         [Required]
@@ -44,5 +50,13 @@ namespace MediaTracker.Models
 
         [DataType(DataType.Date)]
         public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (string.IsNullOrWhiteSpace(this.SerialNumber) && string.IsNullOrWhiteSpace(this.ProductKey))
+            {
+                yield return new ValidationResult("Either a Serial Number or Product Key is required.", new[] { nameof(SerialNumber), nameof(ProductKey) });
+            }
+        }
     }
 }
