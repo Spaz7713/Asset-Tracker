@@ -1,0 +1,57 @@
+# Visual Studio / .NET defaults
+.vs/
+.vscode/
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# Visual Studio Code workspace
+.history/
+
+# Windows artifacts
+Thumbs.db
+Desktop.ini
+
+# ASP.NET temp
+project.lock.json
+project.fragment.lock.json
+
+# Build outputs
+**/bin/
+**/obj/
+
+# NuGet
+*.nupkg
+packages/
+
+# Publish
+publish/
+
+# Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# Dotnet local tool manifest
+.dotnet/
+
+# LocalDB files
+*.mdf
+*.ldf
+
+# Logs
+*.log
+
+# Node
+node_modules/
+
+# Misc
+*.local
+
+# Keep start scripts and README tracked
+# launch-asset-tracker.ps1 left untracked by choice
