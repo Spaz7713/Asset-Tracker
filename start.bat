@@ -1,0 +1,9 @@
+@echo off
+REM Start Asset Tracker from repository root (portable)
+cd /d "%~dp0"
+echo Restoring packages...
+dotnet restore "MediaTracker.csproj"
+echo Building...
+dotnet build "MediaTracker.csproj" -c Debug
+echo Running...
+dotnet run --project "MediaTracker.csproj" -c Debug
